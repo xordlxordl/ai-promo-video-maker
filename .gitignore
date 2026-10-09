@@ -1,0 +1,25 @@
+# 成片与工程：每个人自己的产品，体积大（单个项目 1~4 GB），且工程里有 .env 密钥
+outputs/*
+!outputs/.gitkeep
+
+# 密钥
+.env
+.env.*
+!.env.example
+
+# 依赖与生成物
+node_modules/
+template/out/
+template/public/audio/*.wav
+template/audio-src/_*
+__pycache__/
+*.py[cod]
+
+# 系统与编辑器
+.DS_Store
+._*
+Thumbs.db
+.vscode/
+.idea/
+*.swp
+*.log

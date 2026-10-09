@@ -1,0 +1,41 @@
+{
+  "fps": 60,
+  "width": 1920,
+  "height": 1080,
+  "duration": 12,
+  "beat": 0.5,
+  "bar": 2,
+  "drop": 4,
+  "musicOffset": 0,
+  "scenes": {
+    "open": [
+      0,
+      4
+    ],
+    "main": [
+      4,
+      8
+    ],
+    "end": [
+      8,
+      12
+    ]
+  },
+  "pace": {},
+  "voice": {
+    "voiceId": "",
+    "model": "eleven_v4",
+    "sts": false,
+    "keywords": [],
+    "language": "zh",
+    "settings": {
+      "stability": 0.45,
+      "similarity_boost": 0.75,
+      "use_speaker_boost": true
+    },
+    "rmsDb": -13,
+    "duckDb": -9,
+    "gain": 1.0,
+    "lines": []
+  }
+}
