@@ -1,4 +1,4 @@
-"""渲染前的素材闸门：代码里引用的 public/ 文件是否存在、图片是否过小或过大、字体子集是否缺字。有 ERROR 时退出码为 1。
+"""Asset quality gate before rendering: Checks whether public/ files referenced in code exist, images are too small or too large, and font subsets are missing characters. Exits with code 1 on ERROR.
 
 python3 scripts/check_assets.py
 """
@@ -21,10 +21,10 @@ for p in glob.glob(os.path.join(ROOT, "src", "**", "*.ts*"), recursive=True) + g
         refs.add((m.group(1).lstrip("/"), os.path.relpath(p, ROOT)))
 for ref, where in sorted(refs):
     if not os.path.exists(os.path.join(PUB, ref)):
-        errors.append(f"缺文件 public/{ref}（{where}）")
+        errors.append(f"Missing file public/{ref} ({where})")
 
 if not os.path.exists(os.path.join(PUB, "audio", "mix.wav")):
-    errors.append("缺 public/audio/mix.wav，先跑 npm run mix")
+    errors.append("Missing public/audio/mix.wav, run npm run mix first")
 
 for f in glob.glob(os.path.join(PUB, "**", "*.*"), recursive=True):
     if not re.search(r"\.(png|jpe?g|webp)$", f, re.I):
@@ -32,22 +32,22 @@ for f in glob.glob(os.path.join(PUB, "**", "*.*"), recursive=True):
     try:
         w, h = Image.open(f).size
     except Exception as e:
-        errors.append(f"图片损坏 {os.path.relpath(f, ROOT)}: {e}")
+        errors.append(f"Corrupted image {os.path.relpath(f, ROOT)}: {e}")
         continue
     rel = os.path.relpath(f, ROOT)
     if max(w, h) < 1000:
-        warns.append(f"{rel} 只有 {w}x{h}，若在画面里显示超过 {w // 2}px 宽，4K 下会糊")
+        warns.append(f"{rel} is only {w}x{h}; if displayed wider than {w // 2}px on screen, it will blur in 4K")
     if w > 3000:
-        warns.append(f"{rel} 宽 {w}px，4K 渲染同屏多张时易解码失败，按显示尺寸×2 缩小")
+        warns.append(f"{rel} is {w}px wide; multiple instances on screen in 4K rendering may cause decode failures, downscale to display size * 2")
 
 cfg = json.load(open(os.path.join(ROOT, "fonts.json"), encoding="utf-8"))
 for f in cfg["fonts"]:
     if not os.path.exists(os.path.join(PUB, "fonts", f"{f['file']}.woff2")):
-        errors.append(f"缺字体 public/fonts/{f['file']}.woff2，先跑 npm run fonts")
+        errors.append(f"Missing font public/fonts/{f['file']}.woff2, run npm run fonts first")
 
 for w in warns:
     print("WARN ", w)
 for e in errors:
     print("ERROR", e)
-print(f"引用 {len(refs)} 个文件；{len(errors)} 个错误，{len(warns)} 个提醒")
+print(f"Referenced {len(refs)} files; {len(errors)} errors, {len(warns)} warnings")
 sys.exit(1 if errors else 0)

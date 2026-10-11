@@ -1,4 +1,4 @@
-"""把一组截图拼成带标签的对比图（标签含时间和所属场景）。
+"""Combine a set of screenshots into a labeled comparison sheet (labels include timestamp and scene name).
 
 python3 scripts/sheet.py                       # out/stills/*.jpg -> out/sheet.jpg
 python3 scripts/sheet.py --dir out/stills --cols 4 --out out/sheet.jpg --width 480
@@ -34,7 +34,7 @@ def label(path):
 
 files = sorted(glob.glob(os.path.join(a.dir, "*.jpg")) + glob.glob(os.path.join(a.dir, "*.png")))
 if not files:
-    raise SystemExit(f"没有截图：{a.dir}")
+    raise SystemExit(f"No screenshots found in: {a.dir}")
 first = Image.open(files[0])
 w = a.width
 h = round(w * first.height / first.width)

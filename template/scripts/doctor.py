@@ -1,9 +1,9 @@
-"""环境体检：第一次使用、换电脑、或者脚本报奇怪的错时先跑一遍。只检查，不安装任何东西。
+"""Environment health check: Run on first use, after switching machines, or when scripts encounter strange errors. Inspection only; installs nothing.
 
-python3 <工具目录>/template/scripts/doctor.py   在工作区根目录跑（还没建项目时）
-python3 scripts/doctor.py                      在 <输出目录>/<项目>/工程/ 下跑（会多检查 node_modules）
+python3 <tool_dir>/template/scripts/doctor.py   Run at workspace root (before project is initialized)
+python3 scripts/doctor.py                      Run under <output_dir>/<project>/build/ (also checks node_modules)
 
-MISSING 是必需项，缺了做不出片子；WARN 是可选项，缺了只影响对应的功能。
+MISSING indicates required items without which videos cannot be made; WARN indicates optional items affecting specific features only.
 """
 import importlib.util
 import json
@@ -23,7 +23,7 @@ rows = []
 def report(level, name, detail, fix=""):
     rows.append(level)
     pad = 18 - sum(2 if ord(c) > 0x2E80 else 1 for c in name)
-    print(f"{level:8s}{name}{' ' * pad}{detail}" + (f"\n{'':26s}→ {fix}" if fix else ""))
+    print(f"{level:8s}{name}{' ' * pad}{detail}" + (f"\n{'':26s}-> {fix}" if fix else ""))
 
 
 def install_hint(mac, win, linux):
@@ -42,24 +42,24 @@ major = int(re.sub(r"\D", "", v.split(".")[0]) or 0) if v else 0
 if major >= 18:
     report("OK", "Node.js", v)
 else:
-    report("MISSING", "Node.js", v or "没装", "装 Node.js 18 以上：https://nodejs.org")
+    report("MISSING", "Node.js", v or "Not installed", "Install Node.js 18+: https://nodejs.org")
 
 for tool in ("ffmpeg", "ffprobe"):
     if shutil.which(tool):
         report("OK", tool, version([tool, "-version"])[:60])
     else:
-        report("MISSING", tool, "没装", install_hint("brew install ffmpeg", "winget install ffmpeg", "sudo apt install ffmpeg"))
+        report("MISSING", tool, "Not installed", install_hint("brew install ffmpeg", "winget install ffmpeg", "sudo apt install ffmpeg"))
 
 if sys.version_info >= (3, 9):
     report("OK", "Python", platform.python_version())
 else:
-    report("MISSING", "Python", platform.python_version(), "需要 Python 3.9 以上")
+    report("MISSING", "Python", platform.python_version(), "Requires Python 3.9+")
 
 missing = [m for m, mod in [("numpy", "numpy"), ("scipy", "scipy"), ("Pillow", "PIL"), ("fonttools", "fontTools"), ("brotli", "brotli")] if not importlib.util.find_spec(mod)]
 if missing:
-    report("MISSING", "Python 依赖", "缺 " + " ".join(missing), f"pip install -r {os.path.relpath(os.path.join(ROOT, 'requirements.txt'))}")
+    report("MISSING", "Python deps", "Missing " + " ".join(missing), f"pip install -r {os.path.relpath(os.path.join(ROOT, 'requirements.txt'))}")
 else:
-    report("OK", "Python 依赖", "numpy scipy Pillow fonttools brotli")
+    report("OK", "Python deps", "numpy scipy Pillow fonttools brotli")
 
 if importlib.util.find_spec("playwright"):
     try:
@@ -68,20 +68,20 @@ if importlib.util.find_spec("playwright"):
         with sync_playwright() as p:
             exe = p.chromium.executable_path
         if os.path.exists(exe):
-            report("OK", "Playwright", "截 4K 页面图可用（scripts/shot.py）")
+            report("OK", "Playwright", "Available for 4K web screenshots (scripts/shot.py)")
         else:
-            report("WARN", "Playwright", "没装浏览器内核", "playwright install chromium")
+            report("WARN", "Playwright", "Browser binary not installed", "playwright install chromium")
     except Exception as e:  # noqa: BLE001
-        report("WARN", "Playwright", f"启动失败：{e}"[:80], "playwright install chromium")
+        report("WARN", "Playwright", f"Launch failed: {e}"[:80], "playwright install chromium")
 else:
-    report("WARN", "Playwright", "没装，不能用 shot.py / snapshot.py 截页面图", "pip install playwright && playwright install chromium")
+    report("WARN", "Playwright", "Not installed; cannot use shot.py / snapshot.py for screenshots", "pip install playwright && playwright install chromium")
 
 if os.path.isdir(os.path.join(ROOT, "node_modules")):
-    report("OK", "npm 依赖", "已安装")
+    report("OK", "npm deps", "Installed")
 elif os.path.basename(ROOT) == "template":
-    report("OK", "npm 依赖", "建项目后在 工程/ 里 npm install（不要在 template 里装）")
+    report("OK", "npm deps", "Run npm install in build/ after initializing project (do not install in template)")
 else:
-    report("MISSING", "npm 依赖", "没装", "npm install")
+    report("MISSING", "npm deps", "Not installed", "npm install")
 
 try:
     from fonts import resolve
@@ -89,25 +89,25 @@ try:
     cfg = json.load(open(os.path.join(ROOT, "fonts.json"), encoding="utf-8"))
     bad = [f["file"] for f in cfg["fonts"] if not resolve(f["source"])]
     if bad:
-        report("MISSING", "中文字体", f"找不到 {', '.join(bad)}", "把字体文件放进 fonts-src/ 并改 fonts.json；Linux 可 sudo apt install fonts-noto-cjk")
+        report("MISSING", "CJK Fonts", f"Cannot find {', '.join(bad)}", "Place font file into fonts-src/ and edit fonts.json; on Linux: sudo apt install fonts-noto-cjk")
     else:
-        report("OK", "中文字体", ", ".join(os.path.basename(resolve(f["source"])[0]) for f in cfg["fonts"]))
+        report("OK", "CJK Fonts", ", ".join(os.path.basename(resolve(f["source"])[0]) for f in cfg["fonts"]))
 except Exception as e:  # noqa: BLE001
-    report("WARN", "中文字体", f"检查失败：{e}"[:80])
+    report("WARN", "CJK Fonts", f"Check failed: {e}"[:80])
 
 from elevenlabs import env_files  # noqa: E402
 
-env = os.environ.get("ELEVENLABS_API_KEY") and "环境变量"
+env = os.environ.get("ELEVENLABS_API_KEY") and "Environment variable"
 for f in env_files():
     if not env and os.path.exists(f) and "ELEVENLABS_API_KEY=" in open(f, encoding="utf-8").read():
         env = f
 if env:
-    report("OK", "ElevenLabs", f"已配置 key（{env}）；额度用 python3 scripts/elevenlabs.py quota 查")
+    report("OK", "ElevenLabs", f"Key configured ({env}); check quota with python3 scripts/elevenlabs.py quota")
 else:
-    report("WARN", "ElevenLabs", "没配置：不能生成旁白和定制配乐，会改用曲库配乐 + 纯字幕", "需要时把 ELEVENLABS_API_KEY=... 写进工作区根目录的 .env，或设成环境变量")
+    report("WARN", "ElevenLabs", "Not configured: cannot generate voiceover or custom score, falls back to stock music + subtitles", "If needed, set ELEVENLABS_API_KEY=... in .env at workspace root or as environment variable")
 
 print()
 if "MISSING" in rows:
-    print(f"有 {rows.count('MISSING')} 项必需环境没装好，装好后再跑一次。")
+    print(f"{rows.count('MISSING')} required environment item(s) missing. Please install them and rerun.")
     sys.exit(1)
-print("必需环境都齐了。" + ("" if MAC else "本工具主要在 macOS 上打磨，其他系统遇到问题请对照 references/踩坑记录.md。"))
+print("All required environment items are ready." + ("" if MAC else " This tool was primarily developed on macOS; for issues on other OS, see references/pitfalls.md."))

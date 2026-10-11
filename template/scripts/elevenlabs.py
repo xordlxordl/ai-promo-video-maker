@@ -1,26 +1,26 @@
-"""ElevenLabs 音频生成（配音 / 音效 / 分段作曲 / 额度）。
-key 读取顺序：环境变量 ELEVENLABS_API_KEY → 工程目录的 .env → 往上逐级找 .env → 当前目录往上逐级找 .env
-（写在工作区根目录一次，所有项目通用）。
+"""ElevenLabs audio generation (voiceover / SFX / chunked music score / quota).
+API key search order: environment variable ELEVENLABS_API_KEY -> project .env -> traverse parent dirs for .env -> current dir upwards for .env
+(Set once at the workspace root, shared across all projects).
 
 python3 scripts/elevenlabs.py quota
-python3 scripts/elevenlabs.py voices --zh                       # 账号音色 + 音色库里的中文音色
-python3 scripts/elevenlabs.py vo                                # 按 timing.json 的 voice 表生成全部旁白 + 转写校验
-python3 scripts/elevenlabs.py vo --voice <voice_id> --out /tmp/vo-试听   # 换音色试听，不动正式旁白
-python3 scripts/elevenlabs.py vo --model eleven_flash_v2_5 --out /tmp/vo-flash --only hook,cta   # 对比模型
-python3 scripts/elevenlabs.py vo --takes 4                      # 每句最多生成 4 条，留转写最准的
-python3 scripts/elevenlabs.py stt some.mp3                      # 转写任意音频（Scribe）
-python3 scripts/elevenlabs.py check-mix                         # 转写成品混音，和旁白稿逐句比对（混音后必跑）
+python3 scripts/elevenlabs.py voices --zh                       # Account voices + Chinese voices from voice library
+python3 scripts/elevenlabs.py vo                                # Generate all voiceovers from timing.json voice table + STT verification
+python3 scripts/elevenlabs.py vo --voice <voice_id> --out /tmp/vo-audition   # Test alternate voice without touching production voiceover
+python3 scripts/elevenlabs.py vo --model eleven_flash_v2_5 --out /tmp/vo-flash --only hook,cta   # Compare models
+python3 scripts/elevenlabs.py vo --takes 4                      # Generate up to 4 takes per line, keeping the most accurate transcription
+python3 scripts/elevenlabs.py stt some.mp3                      # Transcribe arbitrary audio (Scribe)
+python3 scripts/elevenlabs.py check-mix                         # Transcribe final mix, comparing line-by-line against script (must run after mix)
 python3 scripts/elevenlabs.py sfx whoosh "Fast clean airy swoosh" --dur 0.8 --influence 0.6
-python3 scripts/elevenlabs.py music score plan.json             # 需付费套餐；plan.json 是 {"chunks": [...]}
+python3 scripts/elevenlabs.py music score plan.json             # Requires paid tier; plan.json is {"chunks": [...]}
 
-音效、作曲写到 audio-src/el/<名字>.mp3，并把提示词追加到 audio-src/el/prompts.tsv（写调研笔记的出处用）。
-旁白写到 audio-src/vo/<句子 id>.mp3，校验结果在 audio-src/vo/report.json；文字、音色、模型都没变的句子不会重新生成。
-timing.json 的 voice 可选：
-  "keywords": ["产品名", "example"]    品牌名、网址等必须一字不差听到的词，转写里缺了就判 CHECK_WORD（整句相似度高也不放过）
-  "sts": true                          生成后再用语音转语音换回 voiceId 的音色（克隆音色在 eleven_v3 上读音准但音色跑偏时用）
-每句还会量句尾混响拖尾（从峰值 -20 dB 衰减到 -45 dB 的时间），超过 250 ms 判 ECHO：在音乐下听起来像回音。
-免费套餐：音效、配音可用，作曲接口返回 402；同时只能跑 1~2 个请求，脚本遇到 429 会自动重试。
-免费套餐的生成内容不含商用授权，交付时必须提醒用户。
+SFX and compositions write to audio-src/el/<name>.mp3, appending prompts to audio-src/el/prompts.tsv (for tracking citations in research notes).
+Voiceovers write to audio-src/vo/<line_id>.mp3, with validation results in audio-src/vo/report.json; lines with unchanged text, voice, and model will not regenerate.
+Optional voice fields in timing.json:
+  "keywords": ["Product", "example"]   Keywords like brand names/URLs that must be heard verbatim; missing in transcript triggers CHECK_WORD
+  "sts": true                          After TTS, applies Speech-to-Speech to restore voiceId timbre (used when cloned voice has accurate pronunciation on eleven_v3 but timbre drifts)
+Also measures reverb tail per line (decay time from peak -20 dB to -45 dB); tails > 250 ms trigger ECHO (sounds like echo under music).
+Free tier: SFX and voiceover work, music endpoint returns 402; supports 1~2 concurrent requests; script automatically retries on 429.
+Content generated under Free tier excludes commercial license; remember to notify the user upon delivery.
 """
 import argparse
 import difflib
@@ -67,7 +67,7 @@ def key():
                 if line.strip().startswith("ELEVENLABS_API_KEY="):
                     k = line.split("=", 1)[1].strip().strip("'\"")
     if not k:
-        sys.exit("缺少 ELEVENLABS_API_KEY：请让用户把 ELEVENLABS_API_KEY=... 写进工作区根目录或工程目录的 .env，或设成环境变量（不要贴到聊天里）")
+        sys.exit("Missing ELEVENLABS_API_KEY: Please set ELEVENLABS_API_KEY=... in .env at workspace root or build directory, or as an environment variable (do not paste into chat)")
     return k
 
 
@@ -100,11 +100,11 @@ def call(path, body=None, retries=4, files=None):
                 continue
             sys.exit(f"HTTP {e.code}: {msg}")
         except (urllib.error.URLError, ConnectionError, TimeoutError) as e:
-            # 国内网络到 api.elevenlabs.io 偶发 Connection reset；稍等重试，仍失败再提示检查代理
+            # Connection reset can occur with api.elevenlabs.io; wait and retry, prompt to check proxy on failure
             if attempt < retries - 1:
                 time.sleep(3 * (attempt + 1))
                 continue
-            sys.exit(f"网络错误 {e}：检查代理（命令行可 export HTTPS_PROXY=http://127.0.0.1:<端口>；macOS 用 scutil --proxy 查端口）")
+            sys.exit(f"Network error {e}: check proxy (export HTTPS_PROXY=http://127.0.0.1:<port>; on macOS run scutil --proxy to check port)")
 
 
 def save(name, audio, prompt, params):
@@ -179,8 +179,8 @@ def norm(s):
 
 
 def check_voice_model(voice, model, sts=False):
-    """专业克隆音色按模型分别训练：没为这个模型训练时直接退出，并列出能用的模型。
-    开了 voice.sts 且转音色模型训练过时放行：未训练的模型只负责读准，音色由语音转语音换回来。"""
+    """Professional cloned voices are trained separately per model: exits if not trained for this model, listing usable models.
+    Passes if voice.sts is enabled and the STS model is trained: the untrained model reads accurately, and STS restores the original voice timbre."""
     try:
         v = json.loads(call(f"/v1/voices/{voice}"))
     except SystemExit:
@@ -189,19 +189,19 @@ def check_voice_model(voice, model, sts=False):
     if v.get("category") != "professional" or state.get(model) == "fine_tuned":
         return
     if sts and state.get(STS_MODEL) == "fine_tuned":
-        print(f"音色「{v.get('name')}」没有为 {model} 训练：用 {model} 读准，再用 {STS_MODEL} 换回本人音色")
+        print(f"Voice '{v.get('name')}' not trained for {model}: reading with {model}, then restoring original voice timbre with {STS_MODEL}")
         return
     ready = [m for m, s in state.items() if s == "fine_tuned" and "sts" not in m]
-    sys.exit(f"音色「{v.get('name')}」没有为 {model} 训练（{state.get(model, '无记录')}）。已训练的模型：{', '.join(ready) or '无'}。\n"
-             f"两条路：① voice.model 换成其中一个（eleven_multilingual_v2 要 stability 0.85，品牌名夹英文时容易连读错、句尾拖尾长，务必配 keywords）；"
-             f"② 保留 {model}、设 voice.sts: true（{STS_MODEL} 已训练时可用，读音准 + 本人音色）")
+    sys.exit(f"Voice '{v.get('name')}' is not trained for {model} ({state.get(model, 'no record')}). Trained models: {', '.join(ready) or 'none'}.\n"
+             f"Two options: 1) Switch voice.model to one of the trained models (eleven_multilingual_v2 requires stability 0.85; when brand names contain English it may slur or produce long tails, so configure keywords);\n"
+             f"2) Keep {model} and set voice.sts: true (available when {STS_MODEL} is trained: accurate pronunciation + authentic timbre)")
 
 
 def voiceover(args):
     tm = json.load(open(os.path.join(ROOT, "src", "timing.json"), encoding="utf-8"))
     cfg = tm.get("voice")
     if not cfg or not cfg.get("lines"):
-        sys.exit("timing.json 里没有 voice.lines：先写旁白表（见 references/配音.md）")
+        sys.exit("timing.json has no voice.lines: write the voiceover lines table first (see references/voiceover.md)")
     voice = args.voice or cfg["voiceId"]
     model = args.model or cfg.get("model", "eleven_v4")
     sts = cfg.get("sts") and {"stability": 0.5, "similarity_boost": 0.9, "style": 0.0, "use_speaker_boost": True}
@@ -229,7 +229,7 @@ def voiceover(args):
         raw = os.path.join(out, "raw", f"{ln['id']}.mp3")
         if cache.get(ln["id"]) != sig or not os.path.exists(raw):
             body = {"text": say, "model_id": model, "language_code": lang, "voice_settings": settings}
-            # eleven_v3 不支持前后文拼接参数
+            # eleven_v3 does not support previous_text / next_text context stitching parameters
             if not model.startswith("eleven_v3"):
                 if i > 0:
                     body["previous_text"] = lines[i - 1].get("say", lines[i - 1]["text"])
@@ -240,7 +240,7 @@ def voiceover(args):
                 take = raw.replace(".mp3", f".take{k}.mp3")
                 open(take, "wb").write(call(f"/v1/text-to-speech/{voice}?output_format=mp3_44100_192", body))
                 if sts:
-                    # 转音色也会把短词读糊（「试试」→「设置」），所以按转完的结果挑
+                    # STS can blur short words, so pick based on the post-conversion result
                     os.replace(take, take + ".tts.mp3")
                     to_voice(take + ".tts.mp3", take, voice, sts)
                     os.remove(take + ".tts.mp3")
@@ -283,15 +283,15 @@ def voiceover(args):
         elif tail > MAX_TAIL_MS:
             status = "ECHO"
         report.append({"id": ln["id"], "at": ln["at"], "dur": round(d, 2), "room": round(room, 2), "tempo": round(tempo, 3), "match": round(score, 2), "lost": lost, "tail_ms": tail, "heard": heard, "status": status})
-        print(f"{status:10s} {ln['id']:10s} {d:5.2f}s / {room:4.2f}s  tempo {tempo:.2f}  match {score:.2f}  tail {tail:3d}ms{'  缺词 ' + ','.join(lost) if lost else ''}  「{heard}」")
+        print(f"{status:10s} {ln['id']:10s} {d:5.2f}s / {room:4.2f}s  tempo {tempo:.2f}  match {score:.2f}  tail {tail:3d}ms{'  Missing words: ' + ','.join(lost) if lost else ''}  [{heard}]")
     prev.update({r["id"]: r for r in report})
     report = [prev[ln["id"]] for ln in lines if ln["id"] in prev]
     json.dump({"voice": voice, "model": model, "sts": bool(sts), "lines": report}, open(last, "w"), ensure_ascii=False, indent=1)
     bad = [r for r in report if r["status"] != "OK"]
     if bad:
         print(
-            f"\n{len(bad)} 句需要处理：TOO_LONG 删字或放宽时间窗；CHECK_TEXT 对照「听到的」改写（数字写成汉字、英文拆开）；"
-            "CHECK_WORD 品牌词没读对，换模型（eleven_v3）或在品牌词前后加逗号断开；ECHO 混响拖尾长，换模型或音色（见 references/配音.md）"
+            f"\n{len(bad)} line(s) need attention: TOO_LONG: shorten text or widen time window; CHECK_TEXT: rewrite according to heard audio (write numbers as words, split English);\n"
+            "CHECK_WORD: brand keyword mispronounced, switch model (eleven_v3) or add commas before/after keyword; ECHO: long reverb tail, switch model or timbre (see references/voiceover.md)"
         )
         sys.exit(1)
 
@@ -304,17 +304,17 @@ def check_mix(args):
     subprocess.run(["ffmpeg", "-v", "error", "-y", "-i", src_, "-b:a", "192k", tmp], check=True)
     heard = transcribe(tmp, (tm.get("voice") or {}).get("language", "zh"))
     h = norm(heard)
-    print("听到：", heard)
+    print("Heard:", heard)
     missing = []
     for ln in lines:
         say = norm(ln.get("say", ln["text"]))
-        # 在转写里滑动找最像的一段：容忍同音错一两个字，整句没听见才算漏
+        # Sliding window search in transcript for best match: tolerates 1-2 homophone errors, counts as missing only if entire sentence is unheard
         best = max(difflib.SequenceMatcher(None, say, h[i : i + len(say)]).ratio() for i in range(max(1, len(h) - len(say) + 1)))
         if best < 0.8:
             missing.append(f"{ln['id']}({best:.2f})")
     total = difflib.SequenceMatcher(None, norm("".join(l.get("say", l["text"]) for l in lines)), h).ratio()
-    print(f"整体匹配 {total:.3f}（要求 ≥ 0.97）；没听清的句子：{missing or '无'}")
-    # 整片转写有随机误差：把没听清的句子截出来再转写两次，两次都对就只是转写误差，不用改混音
+    print(f"Overall match {total:.3f} (required >= 0.97); Unclear sentences: {missing or 'None'}")
+    # Full-track transcription has random noise: slice out unclear sentences and transcribe twice; if both are correct, it's just transcription error, no mix adjustment needed
     lang = (tm.get("voice") or {}).get("language", "zh")
     real = []
     for ln in lines:
@@ -325,16 +325,16 @@ def check_mix(args):
         say = norm(ln.get("say", ln["text"]))
         tries = [transcribe(cut, lang) for _ in range(2)]
         ok = all(difflib.SequenceMatcher(None, say, norm(x)).ratio() >= 0.85 for x in tries)
-        print(f"  截段复查 {ln['id']}：{' / '.join(tries)}  → {'只是整片转写误差' if ok else '确实没听清'}")
+        print(f"  Segment recheck {ln['id']}: {' / '.join(tries)} -> {'Full-track transcription variance only' if ok else 'Actually unclear'}")
         if not ok:
             real.append(ln["id"])
     script = "".join(l.get("say", l["text"]) for l in lines)
     lost = missing_words((tm.get("voice") or {}).get("keywords", []), script, heard)
     if lost:
-        print(f"没听对的关键词：{lost}（品牌名、网址错一个字也要处理）")
+        print(f"Misheard keywords: {lost} (brand names and URLs must match every character)")
     if total < 0.97 or real or lost:
-        print("处理：确实没听清的句子，先重新生成那一句（vo --takes 4，删掉 raw/<id>.mp3）或换个说法；"
-              "截段复查时人声被同时刻的音效盖住，再降那个音效或给该句加深 duckDb")
+        print("Fixes: For sentences truly unclear, regenerate that line (vo --takes 4, delete raw/<id>.mp3) or rephrase;\n"
+              "If vocals are masked by simultaneous SFX during segment recheck, reduce that SFX or deepen duckDb for this line")
         sys.exit(1)
 
 
@@ -347,7 +347,7 @@ def voices(args):
         for g in ("male", "female"):
             q = f"/v1/shared-voices?language=zh&gender={g}&page_size=12&sort=usage_character_count_1y"
             for v in json.loads(call(q)).get("voices", []):
-                print(f"{v['voice_id']}  {v['name'][:32]:32s} 音色库  {v.get('gender')} {v.get('age')} {v.get('accent')} {v.get('use_case')}")
+                print(f"{v['voice_id']}  {v['name'][:32]:32s} VoiceLibrary  {v.get('gender')} {v.get('age')} {v.get('accent')} {v.get('use_case')}")
 
 
 def main():
@@ -357,11 +357,11 @@ def main():
     vs = sub.add_parser("voices")
     vs.add_argument("--zh", action="store_true")
     v = sub.add_parser("vo")
-    v.add_argument("--voice", help="覆盖 timing.json 里的 voiceId（试音色）")
-    v.add_argument("--model", help="覆盖 timing.json 里的 model（对比模型，配合 --out 用）")
-    v.add_argument("--out", help="输出目录，默认 audio-src/vo")
-    v.add_argument("--only", help="只生成这些句子 id，逗号分隔")
-    v.add_argument("--takes", type=int, default=1, help="每句最多生成几条，留转写最准的（克隆音色咬字不稳时用 3~4）")
+    v.add_argument("--voice", help="Override voiceId in timing.json (for testing voices)")
+    v.add_argument("--model", help="Override model in timing.json (for comparing models, use with --out)")
+    v.add_argument("--out", help="Output directory, default audio-src/vo")
+    v.add_argument("--only", help="Only generate these line IDs, comma-separated")
+    v.add_argument("--takes", type=int, default=1, help="Max takes per line, keeping the most accurate transcription (use 3~4 when cloned voice pronunciation is unstable)")
     cm = sub.add_parser("check-mix")
     cm.add_argument("file", nargs="?")
     st = sub.add_parser("stt")
@@ -370,9 +370,9 @@ def main():
     s = sub.add_parser("sfx")
     s.add_argument("name")
     s.add_argument("prompt")
-    s.add_argument("--dur", type=float, help="0.5~30 秒，不填由模型决定")
-    s.add_argument("--influence", type=float, default=0.6, help="0~1，越高越贴提示词")
-    s.add_argument("--loop", action="store_true", help="无缝循环（适合铺底律动）")
+    s.add_argument("--dur", type=float, help="0.5~30 seconds, omitted to let model decide")
+    s.add_argument("--influence", type=float, default=0.6, help="0~1, higher adheres closer to prompt")
+    s.add_argument("--loop", action="store_true", help="Seamless loop (suitable for backing rhythm)")
     m = sub.add_parser("music")
     m.add_argument("name")
     m.add_argument("plan", help="composition plan JSON：{\"chunks\": [{text, duration_ms, positive_styles, negative_styles}]}")
@@ -380,7 +380,7 @@ def main():
 
     if a.cmd == "quota":
         d = json.loads(call("/v1/user/subscription"))
-        print(f"套餐 {d.get('tier')} · 已用 {d.get('character_count')} / {d.get('character_limit')}")
+        print(f"Tier {d.get('tier')} | Used {d.get('character_count')} / {d.get('character_limit')}")
     elif a.cmd == "voices":
         voices(a)
     elif a.cmd == "vo":

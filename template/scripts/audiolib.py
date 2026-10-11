@@ -1,4 +1,4 @@
-"""离线混音库：素材放置、合成音效、音乐入场渐强、母带与响度标准化。mix.py 是按项目写的 cue sheet，只调用这里。"""
+"""Offline audio mixing library: asset placement, synthesized SFX, music intro swells, mastering, and loudness normalization. mix.py is the project-specific cue sheet that calls these utilities."""
 import json
 import os
 import subprocess
@@ -22,7 +22,7 @@ def src(name):
 
 
 def load(name):
-    """任意音频 -> float32 立体声 48k。name 可以是 audio-src 下的文件名或绝对路径。"""
+    """Any audio -> float32 stereo 48k. name can be a filename under audio-src or an absolute path."""
     path = name if os.path.isabs(name) else src(name)
     raw = subprocess.run(
         ["ffmpeg", "-v", "quiet", "-i", path, "-ac", "2", "-ar", str(SR), "-f", "f32le", "-"],
@@ -49,10 +49,10 @@ def stereo(m):
     return np.stack([m, m], axis=1).astype(np.float32)
 
 
-# ---------- 合成音效 ----------
+# ---------- Synthesized SFX ----------
 
 def sub_boom(length=3.5, f0=62, f1=28, decay=1.6):
-    """低频冲击（下潜正弦 + 噪声瞬态），用在爆发点和转场重拍。"""
+    """Sub-bass boom (down-sweeping sine + noise transient), used for drops and transition downbeats."""
     t = np.arange(int(length * SR)) / SR
     f = f1 + (f0 - f1) * np.exp(-t * 5)
     body = np.sin(2 * np.pi * np.cumsum(f) / SR) * np.exp(-t * decay)
@@ -61,20 +61,20 @@ def sub_boom(length=3.5, f0=62, f1=28, decay=1.6):
 
 
 def blip(freq=1800, length=0.09, gain=0.5):
-    """UI 提示音，适合卡片/数字逐个出现。"""
+    """UI blip tone, suitable for sequential reveals of cards/numbers."""
     t = np.arange(int(length * SR)) / SR
     return stereo(np.sin(2 * np.pi * freq * t) * np.exp(-t * 55) * gain)
 
 
 def flick(length=0.05, gain=0.3):
-    """纸牌/卡片滑动的短促噪声。"""
+    """Short noise flick, mimicking sliding cards."""
     t = np.arange(int(length * SR)) / SR
     n = rng.normal(0, 1, len(t)) * np.exp(-t * 90)
     return stereo(lp(hp(n, 1800), 7000) * gain)
 
 
 def room_tone(length, gain=0.012):
-    """极轻的无音高环境底噪，填补纯音效段落的空白，不和任何调性冲突。"""
+    """Subtle pitchless ambient room tone, filling voids in pure SFX sections without harmonic clash."""
     return stereo(lp(hp(rng.normal(0, 1, int(length * SR)), 180), 1600) * gain)
 
 
@@ -92,7 +92,7 @@ def reverb(x, seconds=2.8, wet=0.35):
 
 
 def keystrokes(name, max_hits=60):
-    """从一段打字录音里切出单个按键，用于逐字对齐打字动画。"""
+    """Slice individual keystrokes from a typing recording, used for per-character typing animations."""
     x = load(name)
     mono = np.abs(x.mean(axis=1))
     w = 240
@@ -107,9 +107,9 @@ def keystrokes(name, max_hits=60):
 
 
 def splice(track, spans, offset, duration, xfade=0.03):
-    """按 timing.json 的 music 拼接表把曲子剪成片长：spans = [{at, from, to}]，视频 at 秒起播放曲目 from~to 秒。
-    拼接点要落在小节线上；接缝做 xfade 秒交叉淡化。曲子比片子短、或要在某段多重复几小节时用。
-    from / to 是相对 offset（timing.json 的 musicOffset）的曲目时间，不是曲目绝对时间；各段 at 要首尾相接（下一段 at = 上一段 at + to - from）。"""
+    """Splice music track to video length based on timing.json music splice table: spans = [{at, from, to}], playing track from~to seconds starting at video second at.
+    Splice points should align with bar lines; crossfades across seams by xfade seconds. Used when track is shorter than video or repeating bars in specific sections.
+    from / to are track times relative to offset (timing.json musicOffset), not track absolute time; each segment's at must connect head-to-tail (next at = previous at + to - from)."""
     xf = int(xfade * SR)
     parts = []
     for sp in spans:
@@ -123,7 +123,7 @@ def splice(track, spans, offset, duration, xfade=0.03):
 
 
 def muffle(clip, a, b, hz=420, gain=0.55, ramp=0.15):
-    """把 a~b 秒低通「闷住」（音乐像隔了一堵墙），b 秒处立刻恢复全频。作曲没按计划给出安静段时，用它做出静场。"""
+    """Low-pass muffle between seconds a~b (music sounds behind a wall), instantly restoring full spectrum at second b. Used to create quiet moments when composition lacks quiet sections."""
     i0, i1, k = int(max(0, a - ramp) * SR), int(b * SR), int(ramp * SR)
     out = clip.copy()
     w = np.ones(i1 - i0, dtype=np.float32)
@@ -134,7 +134,7 @@ def muffle(clip, a, b, hz=420, gain=0.55, ramp=0.15):
 
 
 def build_in(clip, seconds, hp_hz=700, g0=0.3, g1=0.75):
-    """音乐入场渐强：开头只保留高频、音量低，seconds 内逐渐打开到全频。比直接淡入更像「推进」。"""
+    """Music intro build: starts with low volume and high frequencies only, opening gradually to full spectrum over seconds. Feels more like a build-up than a simple fade-in."""
     n = min(len(clip), int(seconds * SR))
     w = (np.linspace(0, 1, n) ** 1.6)[:, None]
     head = clip[:n]
@@ -143,10 +143,10 @@ def build_in(clip, seconds, hp_hz=700, g0=0.3, g1=0.75):
     return out
 
 
-# ---------- 旁白 ----------
+# ---------- Voiceover ----------
 
 def level(clip, rms_db=-18.0):
-    """把一段人声统一到给定 RMS（只算有声的部分），让每句旁白响度一致。"""
+    """Level vocal clip to a given RMS (measuring active speech portions only), ensuring consistent loudness across voiceover lines."""
     m = clip.mean(axis=1)
     w = int(0.05 * SR)
     r = np.sqrt((m[: len(m) // w * w].reshape(-1, w) ** 2).mean(axis=1))
@@ -156,19 +156,19 @@ def level(clip, rms_db=-18.0):
 
 
 def voice_lines(tm=None, rms_db=-18.0):
-    """读 timing.json 的 voice.lines 和 audio-src/vo/<id>.mp3（由 elevenlabs.py vo 生成），返回 [(line, clip)]。"""
+    """Read timing.json voice.lines and audio-src/vo/<id>.mp3 (generated by elevenlabs.py vo), returning [(line, clip)]."""
     tm = tm or timing()
     out = []
     for ln in (tm.get("voice") or {}).get("lines", []):
         if not os.path.exists(src(f"vo/{ln['id']}.mp3")):
-            raise FileNotFoundError(f"缺旁白 audio-src/vo/{ln['id']}.mp3：先运行 python3 scripts/elevenlabs.py vo")
+            raise FileNotFoundError(f"Missing voiceover audio-src/vo/{ln['id']}.mp3: run python3 scripts/elevenlabs.py vo first")
         clip = level(hp(load(f"vo/{ln['id']}.mp3"), 90).astype(np.float32), rms_db)
         out.append((ln, clip))
     return out
 
 
 def duck_curve(spans, length, depth_db=-7.0, attack=0.08, release=0.35):
-    """按人声时间段 [(开始, 结束[, 该句压低的 dB])] 生成音乐的逐采样增益：说话时压低 depth_db，前后平滑过渡。传给 Mix.place(duck=...)。"""
+    """Generate sample-wise music gain curve for vocal spans [(start, end[, duck_db_for_line])]: ducks by depth_db during speech with smooth transitions. Passed to Mix.place(duck=...)."""
     n = int(length * SR)
     db = np.zeros(n, dtype=np.float32)
     t = np.arange(n) / SR
@@ -181,7 +181,7 @@ def duck_curve(spans, length, depth_db=-7.0, attack=0.08, release=0.35):
     return (10 ** (db / 20)).astype(np.float32)
 
 
-# ---------- 混音台 ----------
+# ---------- Mixer ----------
 
 class Mix:
     def __init__(self, duration, tail=4.0):
@@ -191,8 +191,8 @@ class Mix:
         self.spans = []
 
     def place(self, clip, at, gain=1.0, align=0.0, fade_in=0.0, fade_out=0.004, duck=None, tag=None):
-        """把 clip 的第 align 秒对齐到时间轴的第 at 秒。duck 是 duck_curve() 的结果，用来在人声下压低音乐。
-        tag="music" / "voice" 会另存一份分轨，vo_margin() 用它检查人声是否压得住音乐。"""
+        """Align second align of clip to second at on timeline. duck is duck_curve() output used to duck music under voiceover.
+        tag="music" / "voice" stores separate stems, used by vo_margin() to check voice-over-music clarity."""
         start = int(round((at - align) * SR))
         clip = clip * gain
         if start < 0:
@@ -220,7 +220,7 @@ class Mix:
                 self.spans.append((start / SR, (start + n) / SR))
 
     def vo_margin(self, need=8.0):
-        """每句旁白时间段里人声比音乐高多少 dB。低于 need 说明人声会被盖住：调高 voice.rmsDb 或加深 duckDb。"""
+        """Measure by how many dB voiceover exceeds music during each vocal span. Lower than need indicates voice is overpowered: increase voice.rmsDb or deepen duckDb."""
         if "voice" not in self.stems or "music" not in self.stems:
             return None
         db = lambda x: 20 * np.log10(np.sqrt(np.mean(x**2)) + 1e-9)
@@ -229,12 +229,12 @@ class Mix:
             i, j = int(a * SR), int(b * SR)
             d = db(self.stems["voice"][i:j]) - db(self.stems["music"][i:j])
             worst = min(worst, d)
-            print(f"  旁白 {a:6.2f}s  人声高出音乐 {d:+5.1f} dB" + ("   ← 偏低" if d < need else ""))
-        print(f"vo_margin: 最低 {worst:+.1f} dB（要求 ≥ +{need:.0f}）")
+            print(f"  Voice {a:6.2f}s  Vocal margin over music {d:+5.1f} dB" + ("   <- Low" if d < need else ""))
+        print(f"vo_margin: min {worst:+.1f} dB (required >= +{need:.0f})")
         return worst
 
     def master(self, dest=None, lufs=-14.0, true_peak=-1.0, end_fade=0.8):
-        """软削波 + 结尾淡出 + ffmpeg 两遍 loudnorm。默认 -14 LUFS（B 站 / YouTube / 抖音通用）。"""
+        """Soft clipping + end fade-out + two-pass ffmpeg loudnorm. Default -14 LUFS (standard for YouTube / social video platforms)."""
         dest = dest or os.path.join(ROOT, "public", "audio", "mix.wav")
         out = hp(self.buf[: int(self.duration * SR)], 25)
         peak = np.abs(out).max() or 1.0
@@ -262,7 +262,7 @@ class Mix:
 
 
 def envelope(path=None, step=0.5, until=None):
-    """打印成品混音的响度曲线，用来确认入场、渐强、爆发点是否符合设计（听不到声音时的主要依据）。"""
+    """Print loudness curve of final mix to verify intro, swell, and drop alignment with design (primary reference when inspecting without audio monitoring)."""
     path = path or os.path.join(ROOT, "public", "audio", "mix.wav")
     sr, x = wavfile.read(path)
     m = x.astype(np.float32).mean(axis=1) / 32768

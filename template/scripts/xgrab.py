@@ -1,11 +1,11 @@
-"""按推文 id 抓取公开元数据与原始媒体（fxtwitter 公共接口，无需登录 X）。
+"""Fetch public metadata and raw media by tweet ID (using fxtwitter public API, no X login required).
 
-python3 scripts/xgrab.py 2105757136219504862 2105735266032095349 ...   # 写入 out/x/<id>/：meta.json + 原图(name=orig) / 原视频
-python3 scripts/xgrab.py --index                                       # 汇总 out/x/index.tsv（作者、时间、点赞、正文）
+python3 scripts/xgrab.py 2105757136219504862 2105735266032095349 ...   # Writes to out/x/<id>/: meta.json + original image (name=orig) / video
+python3 scripts/xgrab.py --index                                       # Summarizes out/x/index.tsv (author, time, likes, text)
 
-被引用的帖子和被回复的帖子会顺带抓一层（常常是真正的原帖）。
-国内网络下 pbs.twimg.com 会被重置连接：脚本自动读取系统代理（macOS 的 scutil 设置），
-也可以手动 export HTTPS_PROXY=http://127.0.0.1:<端口>。
+Quoted and replied tweets are fetched one level deep (often the true original posts).
+If pbs.twimg.com connection resets, the script automatically reads the system proxy (macOS scutil settings),
+or you can manually export HTTPS_PROXY=http://127.0.0.1:<port>.
 """
 import json
 import os
@@ -35,7 +35,7 @@ def grab(tid, depth=0):
     os.makedirs(d, exist_ok=True)
     t = json.loads(fetch(f"https://api.fxtwitter.com/status/{tid}")).get("tweet")
     if not t:
-        print(tid, "无法获取")
+        print(tid, "Unable to fetch")
         return
     meta = {
         "id": tid,
@@ -63,10 +63,10 @@ def grab(tid, depth=0):
                 cmd[1:1] = ["-x", proxy()]
             if subprocess.run(cmd, check=False).returncode != 0 and os.path.exists(path):
                 os.remove(path)
-                print(f"   下载失败：{url}（检查代理）")
+                print(f"   Download failed: {url} (check proxy)")
         meta["media"].append({"type": m["type"], "w": m.get("width"), "h": m.get("height"), "file": os.path.basename(path), "src": m["url"]})
     json.dump(meta, open(os.path.join(d, "meta.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
-    print(f"{tid} @{meta['author']} {meta['created_at']} ♥{meta['likes']} 媒体{[(m['type'], m['w'], m['h']) for m in meta['media']]}")
+    print(f"{tid} @{meta['author']} {meta['created_at']} ♥{meta['likes']} Media{[(m['type'], m['w'], m['h']) for m in meta['media']]}")
     print("   ", (meta["text"] or "").replace("\n", " ")[:160])
     if meta["quote"] and depth == 0:
         grab(meta["quote"], 1)
@@ -93,4 +93,4 @@ if __name__ == "__main__":
             try:
                 grab(tid)
             except Exception as e:  # noqa: BLE001
-                print(tid, "失败", e)
+                print(tid, "Failed", e)

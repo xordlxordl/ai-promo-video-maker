@@ -5,9 +5,9 @@ import { FONT } from "../lib/theme";
 const BAR = 0.036;
 
 /**
- * 装真实网页截图的浏览器窗口（外观按项目风格改，只保留尺寸计算）。
- * `ratio` 是截图原图的宽 / 高（`images.py info` 查），图片按原比例铺满窗口宽度再乘 `zoom`，永远不会被压扁。
- * `scroll` 0..1 从页面顶部滚到底部（长截图用）；`focusX` 0..1 决定放大后看左边还是右边。
+ * A browser window frame for real webpage screenshots (visuals can be styled per project, keeping only dimension calculations).
+ * `ratio` is the original screenshot's width / height (check via `images.py info`). The image scales to fill the window width and is multiplied by `zoom`, ensuring it is never distorted.
+ * `scroll` goes from 0..1 to scroll from the top to the bottom of the page (for long screenshots); `focusX` from 0..1 determines whether to focus on the left or right side when zoomed in.
  */
 export const BrowserFrame: React.FC<{
   src: string;
@@ -20,7 +20,18 @@ export const BrowserFrame: React.FC<{
   scroll?: number;
   style?: React.CSSProperties;
   children?: React.ReactNode;
-}> = ({ src, ratio, url, width, height = (width * 9) / 16, zoom = 1, focusX = 0.5, scroll = 0, style, children }) => {
+}> = ({
+  src,
+  ratio,
+  url,
+  width,
+  height = (width * 9) / 16,
+  zoom = 1,
+  focusX = 0.5,
+  scroll = 0,
+  style,
+  children,
+}) => {
   const bar = Math.round(width * BAR);
   const viewH = height - bar;
   const imgW = width * zoom;
@@ -40,9 +51,26 @@ export const BrowserFrame: React.FC<{
         ...style,
       }}
     >
-      <div style={{ height: bar, display: "flex", alignItems: "center", gap: bar * 0.22, padding: `0 ${bar * 0.45}px`, background: "#F2F4F8" }}>
+      <div
+        style={{
+          height: bar,
+          display: "flex",
+          alignItems: "center",
+          gap: bar * 0.22,
+          padding: `0 ${bar * 0.45}px`,
+          background: "#F2F4F8",
+        }}
+      >
         {["#FF5F57", "#FEBC2E", "#28C840"].map((c) => (
-          <div key={c} style={{ width: bar * 0.3, height: bar * 0.3, borderRadius: 99, background: c }} />
+          <div
+            key={c}
+            style={{
+              width: bar * 0.3,
+              height: bar * 0.3,
+              borderRadius: 99,
+              background: c,
+            }}
+          />
         ))}
         <div
           style={{
@@ -65,8 +93,25 @@ export const BrowserFrame: React.FC<{
           {url}
         </div>
       </div>
-      <div style={{ position: "relative", width, height: viewH, overflow: "hidden" }}>
-        <Img src={staticFile(src)} style={{ position: "absolute", left, top, width: imgW, height: imgH, maxWidth: "none" }} />
+      <div
+        style={{
+          position: "relative",
+          width,
+          height: viewH,
+          overflow: "hidden",
+        }}
+      >
+        <Img
+          src={staticFile(src)}
+          style={{
+            position: "absolute",
+            left,
+            top,
+            width: imgW,
+            height: imgH,
+            maxWidth: "none",
+          }}
+        />
         {children}
       </div>
     </div>

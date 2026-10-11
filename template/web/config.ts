@@ -1,9 +1,9 @@
 export const WEB = {
-  title: "产品名 · 宣传片",
-  brand: "产品名",
+  title: "Product Name · Promo",
+  brand: "Product Name",
   logo: "/img/logo.png",
-  posterNote: "建议开启声音观看",
+  posterNote: "Sound on recommended",
   endNote: "example.com",
-  primary: { label: "立即体验 →", url: "https://example.com" },
-  secondary: { label: "了解更多", url: "https://example.com" },
+  primary: { label: "Try Now →", url: "https://example.com" },
+  secondary: { label: "Learn More", url: "https://example.com" },
 };

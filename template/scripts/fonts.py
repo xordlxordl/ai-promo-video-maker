@@ -1,10 +1,10 @@
-"""按 fonts.json 把字体子集化成 public/fonts/*.woff2（只保留 src/ 和 web/ 里实际用到的字）。改文案后重跑。
+"""Subset fonts into public/fonts/*.woff2 based on fonts.json (keeps only characters actually used in src/ and web/). Rerun after modifying copy.
 
-source 写法：
-  system:PingFang#3            系统字体（在 macOS / Windows / Linux 的字体目录里找 .ttc/.ttf/.otf），# 后是 TTC 内的序号
-  fonts-src/xxx.ttf            工程内字体文件
-  fonts-src/xxx.ttc#2          工程内 TTC 的第 2 个字重
-  A|B|C                        依次尝试，用第一个找得到的（模板默认：苹方 → 微软雅黑 → Noto Sans CJK）
+source format:
+  system:PingFang#3            System font (searches .ttc/.ttf/.otf in macOS / Windows / Linux font directories), after # is the index in the TTC
+  fonts-src/xxx.ttf            Project-local font file
+  fonts-src/xxx.ttc#2          2nd font weight/index inside project TTC
+  A|B|C                        Try in order, use the first one found (template default: PingFang SC -> Microsoft YaHei -> Noto Sans CJK)
 """
 import glob
 import json
@@ -73,7 +73,7 @@ def main():
     for f in cfg["fonts"]:
         hit = resolve(f["source"])
         if not hit:
-            raise SystemExit(f"找不到字体 {f['source']}：把字体文件放进 fonts-src/ 并改 fonts.json（免费可商用字体见 references/素材获取.md）")
+            raise SystemExit(f"Font not found {f['source']}: Place the font file into fonts-src/ and update fonts.json (for free commercial fonts see references/asset-gathering.md)")
         path, index = hit
         font = TTFont(path, fontNumber=index)
         missing = [c for c in text if ord(c) > 0x2E80 and ord(c) not in font.getBestCmap()]
@@ -88,7 +88,7 @@ def main():
         dest = os.path.join(OUT, f"{f['file']}.woff2")
         font.flavor = "woff2"
         font.save(dest)
-        note = f"  ⚠ 缺字 {len(missing)} 个：{''.join(missing[:30])}" if missing else ""
+        note = f"  ⚠ Missing {len(missing)} characters: {''.join(missing[:30])}" if missing else ""
         print(f"{f['file']}: {os.path.basename(path)} {len(text)} chars -> {os.path.getsize(dest) // 1024} KB{note}")
 
 

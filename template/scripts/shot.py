@@ -1,16 +1,16 @@
-"""直接打开网址截 4K 页面图（Playwright，不依赖任何 AI 工具的浏览器插件）。
+"""Directly open URL to take 4K screenshots (Playwright, no AI browser extension required).
 
-python3 scripts/shot.py <网址> <名字>                          # 1920×1080 @2x → out/shots/<名字>-0.jpg（3840×2160）
-python3 scripts/shot.py <网址> <名字> --scroll 0 1400 2800      # 主滚动容器滚到这些位置各截一张
-python3 scripts/shot.py <网址> <名字> --tall 4200 --scale 1.25  # 视口拉高截整页长图（内容区内部滚动的站点也能截全）
-python3 scripts/shot.py <网址> <名字> --hide ".banner" ".float-bar" --eval "document.title = ''"
-python3 scripts/shot.py --login <网址>                          # 需要登录的站点：先跑这一句
-python3 <工具目录>/template/scripts/shot.py file:///<绝对路径>/A.html A --out "<输出目录>/<项目>/样帧"   # 还没建工程时截代码画的风格样帧
+python3 scripts/shot.py <url> <name>                          # 1920x1080 @2x -> out/shots/<name>-0.jpg (3840x2160)
+python3 scripts/shot.py <url> <name> --scroll 0 1400 2800      # Scroll main container to each offset and take a screenshot
+python3 scripts/shot.py <url> <name> --tall 4200 --scale 1.25  # Increase viewport height for full-page tall screenshot (captures sites with internal scroll)
+python3 scripts/shot.py <url> <name> --hide ".banner" ".float-bar" --eval "document.title = ''"
+python3 scripts/shot.py --login <url>                          # For sites requiring login: run this first
+python3 <tool_dir>/template/scripts/shot.py file:///<abs_path>/A.html A --out "<output_dir>/<project>/sample_frames"   # Capture code-rendered style samples before project creation
 
---login 会打开一个有界面的浏览器窗口，请用户在里面登录，登录完关掉窗口即可。
-登录状态保存在 out/.browser-profile/，之后这个工程里的截图都带着它（这个目录含 cookie，不要分享）。
-默认隐藏右上角的账号头像（顶部 80px、右侧 240px 内的图片），--keep-avatar 保留。
-需要 Playwright：pip install playwright && playwright install chromium
+--login opens a browser window with GUI for user to log in; close the window when done.
+Login session is saved to out/.browser-profile/, used by subsequent screenshots in this project (contains cookies, do not share).
+Hides top-right account avatar by default (images within top 80px and right 240px); use --keep-avatar to keep.
+Requires Playwright: pip install playwright && playwright install chromium
 """
 import argparse
 import os
@@ -51,25 +51,25 @@ def login(url):
     with sync_playwright() as p:
         ctx = p.chromium.launch_persistent_context(PROFILE, headless=False, viewport=None)
         pg = open_page(ctx, url, 0)
-        print("已打开浏览器窗口：请在里面登录，登录完成后关掉这个窗口。")
+        print("Browser window opened: please log in inside it, then close the window when done.")
         pg.wait_for_event("close", timeout=0)
         ctx.close()
-    print(f"登录状态已保存到 {PROFILE}")
+    print(f"Login session saved to {PROFILE}")
 
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("url")
     ap.add_argument("name", nargs="?")
-    ap.add_argument("--login", action="store_true", help="打开有界面的浏览器，让用户登录")
+    ap.add_argument("--login", action="store_true", help="Open a browser with GUI for user login")
     ap.add_argument("--width", type=int, default=1920)
     ap.add_argument("--height", type=int, default=1080)
     ap.add_argument("--scale", type=float, default=2)
     ap.add_argument("--scroll", type=int, nargs="*", default=[0])
-    ap.add_argument("--tall", type=int, help="视口高度（css 像素），截整页长图")
-    ap.add_argument("--hide", nargs="*", default=[], help="截图前隐藏的 CSS 选择器（横幅、悬浮条、弹窗）")
-    ap.add_argument("--eval", dest="js", help="截图前在页面里执行的 JS（清理页面用）")
-    ap.add_argument("--wait", type=float, default=1.5, help="页面加载后再等几秒")
+    ap.add_argument("--tall", type=int, help="Viewport height in CSS pixels for full-page tall screenshot")
+    ap.add_argument("--hide", nargs="*", default=[], help="CSS selectors to hide before screenshot (banners, floating bars, popups)")
+    ap.add_argument("--eval", dest="js", help="JS to execute in page before screenshot (for page cleanup)")
+    ap.add_argument("--wait", type=float, default=1.5, help="Seconds to wait after page load")
     ap.add_argument("--keep-avatar", action="store_true")
     ap.add_argument("--out", default=os.path.join(ROOT, "out", "shots"))
     a = ap.parse_args()
@@ -77,7 +77,7 @@ def main():
     if a.login:
         return login(a.url)
     if not a.name:
-        ap.error("缺少 <名字>")
+        ap.error("Missing <name>")
     os.makedirs(a.out, exist_ok=True)
     view = {"viewport": {"width": a.width, "height": a.tall or a.height}, "device_scale_factor": a.scale}
     with sync_playwright() as p:

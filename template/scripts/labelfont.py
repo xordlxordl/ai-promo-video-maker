@@ -1,4 +1,4 @@
-"""联系表、抽帧图上标注文字用的中文字体：按 macOS / Windows / Linux 的常见位置依次找，找不到就用 Pillow 默认字体（中文会显示成方框）。"""
+"""Chinese font for labeling contact sheets and sampled frames: Searches common macOS / Windows / Linux paths in order, falling back to Pillow's default font if not found (non-ASCII characters will display as boxes)."""
 import glob
 
 from PIL import ImageFont
@@ -8,7 +8,7 @@ CANDIDATES = [
     "/System/Library/Fonts/STHeiti Medium.ttc",
     "C:/Windows/Fonts/msyh.ttc",
     "C:/Windows/Fonts/simhei.ttf",
-    "/usr/share/fonts/**/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/**/NotoSans-Regular.ttc",
     "/usr/share/fonts/**/wqy-microhei.ttc",
 ]
 

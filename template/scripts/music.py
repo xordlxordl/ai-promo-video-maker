@@ -1,15 +1,15 @@
-"""配乐与音效：搜索下载（Mixkit 可商用免署名库）、节拍与爆发点分析、逐小节能量表。
+"""Music and SFX: Search and download (Mixkit commercial-free attribution-free library), beat & drop analysis, bar-by-bar energy profile.
 
-python3 scripts/music.py search music cinematic trailer technology    按标签/分类列曲目（标题 id 时长）
-python3 scripts/music.py search sfx whoosh impact riser typing          按分类列音效
-python3 scripts/music.py get music 726 614 -o /tmp/music                下载曲目
-python3 scripts/music.py get sfx 790 2531 -o audio-src                  下载音效
-python3 scripts/music.py analyze /tmp/music/*.mp3                       时长、BPM、每秒响度曲线、爆发点猜测
-python3 scripts/music.py grid audio-src/music.mp3                       精确节拍周期 + 爆发点处的强拍
+python3 scripts/music.py search music cinematic trailer technology    List tracks by tag/category (title, id, duration)
+python3 scripts/music.py search sfx whoosh impact riser typing          List SFX by category
+python3 scripts/music.py get music 726 614 -o /tmp/music                Download tracks
+python3 scripts/music.py get sfx 790 2531 -o audio-src                  Download SFX
+python3 scripts/music.py analyze /tmp/music/*.mp3                       Duration, BPM, loudness curve per second, drop estimation
+python3 scripts/music.py grid audio-src/music.mp3                       Exact beat interval + downbeat near the drop
 python3 scripts/music.py bars audio-src/music.mp3 --beat 0.8955 --downbeat 14.38 --offset 2.88
-                                                                        逐小节能量表，并换算成视频时间轴
-python3 scripts/music.py tempo audio-src/music.mp3 --from 8 --to 46     grid 一致性 < 0.8 时用：频谱通量自相关测 BPM，
-                                                                        并列出逐 2 秒的重拍，供人工确认小节线
+                                                                        Bar-by-bar energy table mapped to video timeline
+python3 scripts/music.py tempo audio-src/music.mp3 --from 8 --to 46     Used when grid consistency < 0.8: spectral flux autocorrelation for BPM,
+                                                                        and lists downbeats every 2 seconds for manual bar line verification
 """
 import argparse
 import os
@@ -133,18 +133,18 @@ def grid(path, a=None, b=None):
     b = b if b is not None else min(dur, a + 30)
     t = kick_times(x, a, b)
     if len(t) < 4:
-        raise SystemExit("强拍太少，换个 --from/--to 区间")
+        raise SystemExit("Too few downbeats found, try a different --from/--to interval")
     best = max((np.mean(np.cos(2 * np.pi * (((t - t[0]) / p) % 1))), p) for p in np.arange(0.25, 1.2, 0.0001))
     beat = best[1]
-    print(f"强拍（{a:.1f}–{b:.1f}s）：{np.round(t[:16], 3)}")
-    print(f"节拍周期 beat = {beat:.4f}s  （{60 / beat:.1f} BPM，倍速 {120 / beat:.1f}）  一致性 {best[0]:.2f}")
-    print(f"一小节(4 拍) bar = {4 * beat:.4f}s   两小节 = {8 * beat:.4f}s")
-    print(f"爆发点附近第一个强拍 downbeat = {t[0]:.3f}s")
-    print("把视频爆发点放在 T 秒时：musicOffset = downbeat - T；timing.json 里 beat/bar 用上面的值")
+    print(f"Downbeats ({a:.1f}–{b:.1f}s): {np.round(t[:16], 3)}")
+    print(f"Beat period beat = {beat:.4f}s  ({60 / beat:.1f} BPM, double-time {120 / beat:.1f})  consistency {best[0]:.2f}")
+    print(f"1 bar (4 beats) bar = {4 * beat:.4f}s   2 bars = {8 * beat:.4f}s")
+    print(f"First downbeat near drop = {t[0]:.3f}s")
+    print("When placing video drop at T seconds: musicOffset = downbeat - T; use above beat/bar in timing.json")
 
 
 def tempo(path, a, b):
-    """预告片 / 混合配器的作曲重拍多、切分多，grid 的强拍拟合常给出倍速或一致性很低。这里用频谱通量自相关找周期。"""
+    """Trailer / hybrid orchestral compositions have heavy beats and syncopation where grid beat fitting often produces double-time or low consistency. This uses spectral flux autocorrelation to find the tempo period."""
     x = load(path)
     a = a or 0.0
     b = b or len(x) / SR
@@ -159,14 +159,14 @@ def tempo(path, a, b):
     lags = np.arange(len(ac)) / fr
     m = (lags > 0.35) & (lags < 0.8)
     beat = lags[np.argmax(ac * m)]
-    print(f"节拍周期 beat = {beat:.4f}s（{60 / beat:.2f} BPM），一小节 bar = {4 * beat:.4f}s")
+    print(f"Beat period beat = {beat:.4f}s ({60 / beat:.2f} BPM), 1 bar = {4 * beat:.4f}s")
     lo = sosfilt(butter(4, 120, "low", fs=SR, output="sos"), x)
     h2 = 110
     db = 20 * np.log10(np.array([np.sqrt(np.mean(lo[i : i + h2] ** 2)) for i in range(0, len(lo) - h2, h2)]) + 1e-7)
     on = np.convolve(np.maximum(0, np.diff(db, prepend=db[0])), np.ones(3), "same")
     pk, _ = find_peaks(on, height=4, distance=int(0.2 * SR / h2))
     ts = pk * h2 / SR
-    print("每 2 秒内最强的低频起音（找小节线用，前后几格应间隔一致）：")
+    print("Strongest low-frequency onset every 2 seconds (for locating bar lines; intervals between frames should be consistent):")
     for t0 in np.arange(0, len(x) / SR, 2.0):
         sel = pk[(ts >= t0) & (ts < t0 + 2)]
         if len(sel):
@@ -183,7 +183,7 @@ def bars(path, beat, downbeat, offset):
     def db(y, s):
         return 20 * np.log10(np.sqrt(np.mean(y[s] ** 2)) + 1e-9)
 
-    print(f"{'曲目时间':>8} {'视频时间':>8} {'全频':>6} {'低频':>6} {'高频':>6}")
+    print(f"{'TrackTime':>9} {'VideoTime':>9} {'Full':>6} {'Low':>6} {'High':>6}")
     while t + bar <= len(x) / SR:
         s = slice(int(t * SR), int((t + bar) * SR))
         v = db(x, s)

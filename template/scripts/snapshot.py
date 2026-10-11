@@ -1,13 +1,13 @@
-"""把 snapshot.js 导出的已登录页面快照，在本地 Chromium 里按高清尺寸重新渲染成截图。
+"""Re-render logged-in page snapshots exported by snapshot.js into high-resolution screenshots using local Chromium.
 
-python3 scripts/snapshot.py <快照> <名字>                         # 1920×1080 @2x → out/shots/<名字>-0.jpg（3840×2160）
-python3 scripts/snapshot.py <快照> <名字> --scroll 0 1400 2800     # 主滚动容器滚到这些位置各截一张
-python3 scripts/snapshot.py <快照> <名字> --tall 4200 --scale 1.25 # 视口拉到 4200 高截整页长图（内容区内部滚动的站点也能截全）
-python3 scripts/snapshot.py <快照> <名字> --hide ".float-bar" ".banner"
+python3 scripts/snapshot.py <snapshot> <name>                         # 1920x1080 @2x -> out/shots/<name>-0.jpg (3840x2160)
+python3 scripts/snapshot.py <snapshot> <name> --scroll 0 1400 2800     # Scroll main container to each offset and take a screenshot
+python3 scripts/snapshot.py <snapshot> <name> --tall 4200 --scale 1.25 # Set viewport height to 4200 for full-page tall screenshot
+python3 scripts/snapshot.py <snapshot> <name> --hide ".float-bar" ".banner"
 
-<快照> 可以是 .html，也可以是 browser_cdp 返回的大响应文件（{"result": {"value": "<JSON>"}}）或 snapshot.js 的 JSON。
-默认隐藏右上角的账号头像（顶部 80px、右侧 240px 内的图片），--keep-avatar 保留。
-需要 Playwright：pip install playwright && playwright install chromium
+<snapshot> can be .html, a large response file returned by browser_cdp ({"result": {"value": "<JSON>"}}), or snapshot.js JSON.
+Hides the account avatar in the top-right corner by default (images within top 80px and right 240px); use --keep-avatar to keep.
+Requires Playwright: pip install playwright && playwright install chromium
 """
 import argparse
 import json
@@ -51,8 +51,8 @@ def main():
     ap.add_argument("--height", type=int, default=1080)
     ap.add_argument("--scale", type=float, default=2)
     ap.add_argument("--scroll", type=int, nargs="*", default=[0])
-    ap.add_argument("--tall", type=int, help="视口高度（css 像素），截整页长图")
-    ap.add_argument("--hide", nargs="*", default=[], help="截图前隐藏的 CSS 选择器（横幅、悬浮条）")
+    ap.add_argument("--tall", type=int, help="Viewport height in CSS pixels for full-page tall screenshot")
+    ap.add_argument("--hide", nargs="*", default=[], help="CSS selectors to hide before screenshot (banners, floating bars)")
     ap.add_argument("--keep-avatar", action="store_true")
     ap.add_argument("--out", default=os.path.join(ROOT, "out", "shots"))
     a = ap.parse_args()

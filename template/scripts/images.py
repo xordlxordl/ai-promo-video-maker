@@ -1,15 +1,15 @@
-"""图片素材：从产品文档批量抓图、按文档出联系表挑图、按画幅预览裁切效果、缩放进 public/。
+"""Image assets: Batch-grab images from product docs, generate contact sheets per doc for selection, preview crop effects by aspect ratio, and resize into public/.
 
-python3 scripts/images.py grab <md文件或目录...> [--match 关键词 ...] -o /tmp/imgs
-    抓取 Markdown 里的全部图片（跳过 gif），按文档分组命名 <组号>_<序号>，写 index.txt（组号→文档标题）
+python3 scripts/images.py grab <md_files_or_dirs...> [--match keywords...] -o /tmp/imgs
+    Grab all images from Markdown files (skip gifs), group and name them as <group>_<index>, and write index.txt (group -> doc title)
 python3 scripts/images.py sheet /tmp/imgs [--group ab12c] [--minw 700]
-    每个文档一张带文件名和尺寸的联系表 /tmp/imgs/_sheet_<组号>.jpg，用来逐篇挑图
+    Generate a contact sheet /tmp/imgs/_sheet_<group>.jpg with filenames and dimensions for each doc to review images
 python3 scripts/images.py crop out/pick.jpg /tmp/imgs/a_01.png /tmp/imgs/b_03.png [--ratio 16:9] [--anchor top]
-    按视频里的实际裁切方式预览候选图，决定用哪张、objectPosition 设哪里
-python3 scripts/images.py prepare <源图> <public 下的目标路径> [--max 2800]
-    统一转 jpg 并限制宽度（4K 渲染下同屏大图很多时，按实际显示尺寸再缩小，避免解码失败）
+    Preview candidate images using actual video crop ratios to decide which to use and where to set objectPosition
+python3 scripts/images.py prepare <source_image> <dest_path_under_public> [--max 2800]
+    Convert uniformly to jpg and limit width (when many large images share the screen in 4K, downscale to display size to avoid decode errors)
 python3 scripts/images.py info public/works
-    列出尺寸，标出过小（放大会糊）和过大（4K 渲染吃内存）的图
+    List dimensions, flagging images that are too small (blurry when scaled) or too large (consumes memory during 4K render)
 """
 import argparse
 import glob
@@ -55,7 +55,7 @@ def grab(paths, match, out):
 
     with ThreadPoolExecutor(32) as ex:
         list(ex.map(dl, jobs))
-    print(f"{len(jobs)} 张图，来自 {len(index)} 篇文档 -> {out}（组号见 index.txt）")
+    print(f"{len(jobs)} images from {len(index)} documents -> {out} (see index.txt for group IDs)")
 
 
 def open_rgb(path):
@@ -133,7 +133,7 @@ def info(folder):
             w, h = Image.open(f).size
         except Exception:
             continue
-        flag = "  ⚠ 过小，放大必糊" if max(w, h) < 1000 else ("  ⚠ 过大，4K 同屏多张时先缩小" if w > 3000 else "")
+        flag = "  ⚠ Too small, will blur when scaled" if max(w, h) < 1000 else ("  ⚠ Too large, downscale when multiple appear on screen in 4K" if w > 3000 else "")
         print(f"{w:5d}x{h:<5d} {os.path.relpath(f, folder)}{flag}")
 
 
